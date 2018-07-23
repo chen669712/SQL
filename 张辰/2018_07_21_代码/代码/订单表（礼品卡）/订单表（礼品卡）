@@ -1,0 +1,43 @@
+use bnb_hive_db;
+insert overwrite table bnb_data_order_information
+partition(d = '${zdt.addDay(-1).format("yyyy-MM-dd")}')
+select a.orderid as orderid
+	,a.uid as UID
+	,a.createdtime as createdtime
+	,c.checkin as checkin
+	,c.checkout as checkout
+	,a.totalsaleamount as cii_receivable
+	,b.statusid as orderstatus
+	,datediff(to_date(c.checkout),to_date(c.checkin)) as ciiquantity
+	,b.productname as hotelname
+	,null as clientname
+	,a.allianceid as allianceid
+	,a.alliancesid as sid
+	,1 as type
+	from 
+	(select * from ods_htl_bnborderdb.order_header_v2
+		where d = '${zdt.addDay(0).format("yyyy-MM-dd")}') a
+	left join
+	(select * from ods_htl_bnborderdb.order_item
+		where d = '${zdt.addDay(0).format("yyyy-MM-dd")}') b	
+	on a.orderid = b.orderid
+	left join 
+	(select * from ods_htl_bnborderdb.order_item_space
+		where d = '${zdt.addDay(0).format("yyyy-MM-dd")}') c
+	on b.orderitemid = c.orderitemid
+union all
+select orderid as orderid
+	,uid as UID
+	,orderdate as createdtime
+	,arrival as checkin
+	,etd as checkout
+	,ordamount as cii_receivable
+	,orderstatus as orderstatus
+	,datediff(to_date(etd),to_date(arrival)) as ciiquantity
+	,null as hotelname
+	,clientname as clientname
+	,null as allianceid
+	,null as sid
+	,2 as type 
+	from dw_htlmaindb.facthotelorder_all_inn
+where d = '${zdt.addDay(0).format("yyyy-MM-dd")}'

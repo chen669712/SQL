@@ -1,0 +1,16 @@
+--key:o_hotel_inquire_trace,海外酒店频道：首页城市搜索页选取城市后算一个UV
+select d,count(distinct clientcode) from dw_mobdb.factmbtracelog_sdk where actioncode = 'o_hotel_inquire_trace'
+where d >= '2018-06-28' and d <= '2018-07-04'
+group by d
+
+--key:bnb_inn_list_app_basic 宫格：首页城市搜索页选取城市后算一个UV
+select d,sum(a.uv) from 
+(select d,get_json_object(value,'$.cityid') cityid,count(DISTINCT newvalue.data['env_clientcode']) uv from dw_mobdb.factmbtracelog_hybrid 
+where d >= '2018-06-28' and d <= '2018-07-04'
+group by d,get_json_object(value,'$.cityid')) a
+inner join
+(select cityid,country from ods_htl_groupwormholedb.bnb_city
+where d = '2018-07-09' 
+and country != 1)b
+on a.cityid = b.cityid 
+group by d 

@@ -1,0 +1,56 @@
+--2017.10.01-2017.10.31下单的老客
+	select a.ordertime,count(a.uid) from
+--2017.10.01下单的客户 
+	(select 1 as t,substr(ordertime,1,10) ordertime,uid from bnb_hive_db.bnb_orderinfo
+	where d = '2018-06-21'
+	and substr(ordertime,1,10) >= '2017-10-01'
+	and substr(ordertime,1,10) <= '2017-10-31'
+	and agent = 0
+	group by substr(ordertime,1,10),uid) a 
+	inner join
+--2017.10.01之前下单的客户 
+	(select 1 as t,substr(ordertime,1,10) ordertime,uid from bnb_hive_db.bnb_orderinfo
+	where d = '2018-06-21'
+	and substr(ordertime,1,10) < '2017-10-01'
+	and agent = 0
+	group by substr(ordertime,1,10),uid) b
+	on a.uid = b.uid and a.1 = b.1
+	group by a.ordertime
+
+--2017.10.01-2017.10.31下单的老客
+	select a.ordertime,count(a.uid) from
+--2017.10.01-2017.10.31下单的客户 
+	(select substr(ordertime,1,10) ordertime,uid from bnb_hive_db.bnb_orderinfo
+	where d = '2018-06-21'
+	and substr(ordertime,1,10) >= '2017-10-01'
+	and substr(ordertime,1,10) <= '2017-10-31'
+	and agent = 0
+	group by substr(ordertime,1,10),uid) a 
+	left outer join
+--2017.10.01-2017.10.31之前下单的新客 
+	(select ordertime, uid from 
+		(select uid,ordertime,row_number() over(partition by uid order by ordertime) as rn from 
+			(select uid,substr(ordertime,1,10) as ordertime from bnb_hive_db.bnb_orderinfo
+			where d = '2018-06-21'
+            and agent = 0) a
+		) b
+	where rn = 1
+	and substr(ordertime,1,10) >= '2017-10-01'
+	and substr(ordertime,1,10) <= '2017-10-31'
+	group by ordertime,uid) b
+	on a.uid = b.uid and a.ordertime = b.ordertime
+	where b.uid is null
+	group by a.ordertime
+
+
+	--2017.10.01-2017.10.31下单的新客	
+	select ordertime,count(distinct uid) from 
+		(select uid,ordertime,row_number() over(partition by uid order by ordertime) as rn from 
+			(select uid,substr(ordertime,1,10) as ordertime from bnb_hive_db.bnb_orderinfo
+			where d = '2018-06-21'
+            and agent = 0) a
+		) b
+	where rn = 1
+	and substr(ordertime,1,10) >= '2017-10-01'
+	and substr(ordertime,1,10) <= '2017-10-31'
+	group by ordertime

@@ -1,0 +1,75 @@
+---有礼品卡支付的订单
+select op.orderid as orderID，op.createdtime 
+from ods_htl_bnborderdb.order_pay op
+inner join ods_htl_bnborderdb.order_pay_trans opt on op.payid=opt.payid and opt.d = '2018-06-20'
+inner join ods_htl_bnborderdb.order_pay_trans_detail optd on optd.transid=opt.transid and optd.d = '2018-06-20'
+where optd.paytypecode = 'TMPAY' and op.createdtime>'2018-05-25' and op.d = '2018-06-20'
+
+--订单-UID映射sql
+use bnb_hive_db;
+insert overwrite table bnb_orderinfo
+partition(d = '${zdt.addDay(-1).format("yyyy-MM-dd")}')
+select b.uid,b.orderid from 
+	(select orderid from ods_htl_bnborderdb.order_pay
+		where d = '2018-06-27'
+		group by orderid)a
+	left outer join
+	(select uid,orderid from ods_htl_bnborderdb.order_header_v2
+		where d = '2018-06-27'
+		group by uid,orderid) b	
+	on a.orderid = b.orderid
+union all
+select uid,orderid from dw_htlmaindb.facthotelorder_all_inn
+where d = '2018-06-27'
+group by uid,orderid
+
+
+--订单-UID映射表
+use bnb_hive_db;
+insert overwrite table bnb_orderinfo
+partition(d = '${zdt.addDay(-1).format("yyyy-MM-dd")}')
+select b.uid,b.orderid from 
+	(select orderid from ods_htl_bnborderdb.order_pay
+		where d = '${zdt.addDay(-1).format("yyyy-MM-dd")}'
+		group by orderid)a
+	left outer join
+	(select uid,orderid from ods_htl_bnborderdb.order_header_v2
+		where d = '${zdt.addDay(-1).format("yyyy-MM-dd")}'
+		group by uid,orderid) b	
+	on a.orderid = b.orderid
+union all
+select uid,orderid from dw_htlmaindb.facthotelorder_all_inn
+where d = '${zdt.addDay(-1).format("yyyy-MM-dd")}'
+group by uid,orderid
+
+
+
+
+
+
+
+use bnb_hive_db;
+insert overwrite table bnb_orderinfo
+partition(d = '${zdt.addDay(-1).format("yyyy-MM-dd")}')
+select oo.* from (
+  -----客栈订单数据
+  select orderid
+    , orderdate as ordertime
+    , uid
+    , hotel as productid
+    , null as vendorid
+    , to_date(arrival) as checkin
+    , to_date(departure) as checkout
+    , ordquantity as days
+    , ordamount as orderamount
+    , orderstatus
+    , case when (ordertype_ubt is null and d<'2018-05-25') then '102'  --客栈未知来源
+           when (ordertype_ubt is null and d>'2018-05-24') then '101'  --客栈宫格
+           when ordertype_ubt = '直接订单' then '101'  --客栈宫格
+           else ordertype_ubt end as source
+    , cityid
+    , null as visitsource
+    , null as sellerid
+    , null as agent
+   , null as cid
+   , null as salesChannel

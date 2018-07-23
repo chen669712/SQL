@@ -1,0 +1,4 @@
+埋点内容
+cityid: 城市id,
+input: 输入,
+keyword_list: 联想结果

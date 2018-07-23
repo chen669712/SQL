@@ -1,0 +1,256 @@
+--APP宫格主流程各页面流量（窄口径）
+/*use bnb_hive_db;
+CREATE TABLE bnb_data_app_unique_visitor(
+  homeuv string COMMENT '宫格首页UV'
+  , listuv string COMMENT '宫格列表页UV'
+  , detailuv string COMMENT '宫格详情页UV'
+  , filluv string COMMENT '宫格填写页UV'
+)COMMENT '宫格各页面流量表'
+PARTITIONED BY (`d` string COMMENT 'date')
+
+use bnb_hive_db;
+insert overwrite table bnb_data_app_unique_visitor
+partition(d = '${zdt.addDay(-1).format("yyyy-MM-dd")}')*/
+
+--建立临时表，获取首页使用搜索，列表页，详情页，填写页UV
+use bnb_hive_db;
+drop table if exists tmp_zc_app_unique_visitor;
+create table tmp_zc_app_unique_visitor as
+select home.d
+  , count(distinct home.cid) as homeuv
+  , count(distinct list.cid) as listuv
+  , count(distinct detail.cid) as detailuv
+  , count(distinct fill.cid) as filluv
+from
+  (select a.d,a.cid from
+    (
+--点击搜索按钮的cid
+    select d
+    ,newvalue.data['env_clientcode'] as cid
+    from dw_mobdb.factmbtracelog_hybrid 
+    where d >= '2018-07-10'
+      and d <= '2018-07-16' 
+      and key = 'bnb_inn_list_app_basic'
+    group by d,newvalue.data['env_clientcode']
+    union all
+--点击搜索框的cid
+    select d
+    ,newvalue.data['env_clientcode'] as cid
+    from dw_mobdb.factmbtracelog_hybrid 
+    where d >= '2018-07-10'
+      and d <= '2018-07-16' 
+      and key = 'c_bnb_inn_home_filter_app'
+    group by d,newvalue.data['env_clientcode']
+    ) a
+  group by a.d,a.cid 
+  ) home
+  left outer join
+  (select d,clientcode as cid
+    from dw_mobdb.factmbpageview 
+    where d >= '2018-07-10'
+      and d <= '2018-07-16' 
+      and pagecode = '600003563'
+    group by d,clientcode) list
+  on home.cid = list.cid and home.d = list.d
+  left outer join 
+  (select d,clientcode as cid
+    from dw_mobdb.factmbpageview 
+    where d >= '2018-07-10'
+      and d <= '2018-07-16' 
+      and pagecode in ('600003564','10320677404')
+    group by d,clientcode) detail
+  on home.cid = detail.cid and home.d = detail.d
+  left outer join
+  (select d,clientcode as cid
+    from dw_mobdb.factmbpageview 
+    where d >= '2018-07-10'
+      and d <= '2018-07-16' 
+      and pagecode in ('600003570','10320677405')
+    group by d,clientcode) fill
+  on home.cid = fill.cid and home.d = fill.d
+group by home.d
+
+--APP宫格主流程用户转化
+select filter.d as `日期`
+  ,filter.uv as `首页筛选UV`
+  ,uv.homeuv as `首页搜索UV`
+  ,pay.ois as `支付订单`
+  ,concat(cast(100*(pay.ois/uv.homeuv) as decimal(5,2)),'%') as `U2O`
+  ,concat(cast(100*(uv.listuv/uv.homeuv) as decimal(5,2)),'%') as `S2L`
+  ,concat(cast(100*(uv.detailuv/uv.listuv) as decimal(5,2)),'%') as `L2D`
+  ,concat(cast(100*(uv.filluv/uv.detailuv) as decimal(5,2)),'%') as `D2B`
+  ,concat(cast(100*(submit.ois/uv.filluv) as decimal(5,2)),'%') as `B2提交`
+  ,concat(cast(100*(pay.ois/submit.ois) as decimal(5,2)),'%') as `提交2有效`
+from
+(select d,count(DISTINCT newvalue.data['env_clientcode']) uv
+  from dw_mobdb.factmbtracelog_hybrid
+  where d >= '2018-07-10'
+    and d <= '2018-07-16'
+    and key = 'c_bnb_inn_home_filter_app'
+  group by d) filter
+inner join
+(select d
+  , homeuv
+  , listuv
+  , detailuv
+  , filluv
+  from bnb_hive_db.tmp_zc_app_unique_visitor
+  where d >= '2018-07-10'
+    and d <= '2018-07-16')uv 
+on filter.d = uv.d
+inner join
+(select a.d                    
+  , sum (a.ois) as ois
+  from
+  (select a.d
+      ,if(a.d>='2018-05-26', sum(if(a.terminalType=10, 1, 0))
+          , sum(if(a.applicationType=10 or a.applicationType is null, 1, 0))) as ois
+  from
+    (select distinct substring(b1.createdtime, 0, 10) as d
+        , b1.applicationType
+        , b1.terminalType
+        , a1.orderid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-17'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-17'
+    where substring(b1.createdtime,0,10) >= '2018-07-10'
+      and substring(b1.createdtime,0,10) <= '2018-07-16'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and a1.saleamount>=20 and a1.d='2018-07-17' and b1.sellerid=0) a
+    group by a.d
+
+    union all
+
+    select b.d
+      , count(distinct b.orderid) as ois
+    from
+    (select substring(orderdate, 0, 10) as d
+      ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10) >= '2018-07-10'
+      and substring(orderdate,0,10) <= '2018-07-16'
+      and d ='2018-07-17' ) b
+    group by b.d
+  )a group by a.d) submit on uv.d = submit.d
+inner join 
+(select a.d                
+  , sum (a.ois) as ois
+from
+(select a.d
+  ,if(a.d>='2018-05-26', sum(if(a.terminalType=10, 1, 0))
+      , sum(if(a.applicationType=10 or a.applicationType is null, 1, 0))) as ois
+from
+(select distinct substring(b1.createdtime, 0, 10) as d
+    , b1.applicationType
+    , b1.terminalType
+    , a1.orderid
+from ods_htl_bnborderdb.order_item a1
+left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-17'
+left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-17'
+where substring(b1.createdtime,0,10) >= '2018-07-10'
+  and substring(b1.createdtime,0,10) <= '2018-07-16'
+  and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+  and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+  and a1.saleamount>=20 and a1.d='2018-07-17' and b1.sellerid=0) a
+group by a.d
+union all
+select b.d
+  , round(count(distinct b.orderid)*0.85,0) as ois
+from
+(select substring(orderdate, 0, 10) as d
+  ,orderid
+from dw_htlmaindb.FactHotelOrder_All_Inn
+where substring(orderdate,0,10) >= '2018-07-10'
+  and substring(orderdate,0,10) <= '2018-07-16'
+  and d ='2018-07-17' ) b
+  group by b.d)a group by a.d) pay on uv.d = pay.d
+
+--首页曝光UV
+select d,count(distinct clientcode) from dw_mobdb.factmbpageview 
+where d >= '2018-07-10'
+  and d <= '2018-07-16'
+  and pagecode = '600003560'
+group by d
+
+--完成搜索UV
+select d
+  ,count(distinct newvalue.data['env_clientcode']) cid
+from dw_mobdb.factmbtracelog_hybrid 
+where d >= '2018-07-10'
+  and d <= '2018-07-16' 
+  and key = 'bnb_inn_list_app_basic'
+group by d
+
+--列表页、详情页、填写页UV
+select * from bnb_hive_db.tmp_zc_app_unique_visitor 
+where d >= '2018-07-10'
+  and d<= '2018-07-16'
+
+--订单提交UV
+select a.d                    
+  , sum (a.uv) as uv
+  from
+  (select a.d,count(distinct uid) as uv from
+    (select distinct substring(b1.createdtime, 0, 10) as d
+        , b1.applicationType
+        , b1.terminalType
+        , a1.orderid
+        , b1.uid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-17'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-17'
+    where substring(b1.createdtime,0,10) >= '2018-07-10'
+      and substring(b1.createdtime,0,10) <= '2018-07-16'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and a1.saleamount>=20 and a1.d='2018-07-17' and b1.sellerid=0
+      and b1.terminalType = 10) a
+    group by a.d
+
+    union all
+
+    select b.d
+      , count(distinct uid) as uv
+    from
+    (select substring(orderdate, 0, 10) as d
+      ,orderid
+      ,uid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10) >= '2018-07-10'
+      and substring(orderdate,0,10) <= '2018-07-16'
+      and d ='2018-07-17') b
+    group by b.d
+  )a group by a.d
+
+--支付成功人数
+select a.d                
+  , sum (a.uv) as uv
+from
+(select a.d
+  ,count(distinct uid) as uv
+from
+(select distinct substring(b1.createdtime, 0, 10) as d
+    , b1.applicationType
+    , b1.terminalType
+    , a1.orderid
+    , b1.uid
+from ods_htl_bnborderdb.order_item a1
+left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-17'
+left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-17'
+where substring(b1.createdtime,0,10) >= '2018-07-10'
+  and substring(b1.createdtime,0,10) <= '2018-07-16'
+  and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+  and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+  and a1.saleamount>=20 and a1.d='2018-07-17' and b1.sellerid=0 and b1.terminalType = 10) a
+group by a.d
+union all
+select b.d
+  , round(count(distinct b.uid)*0.85,0) as uv
+from
+(select substring(orderdate, 0, 10) as d
+  ,orderid
+  ,uid
+from dw_htlmaindb.FactHotelOrder_All_Inn
+where substring(orderdate,0,10) >= '2018-07-10'
+  and substring(orderdate,0,10) <= '2018-07-16'
+  and d ='2018-07-17') b
+  group by b.d)a group by a.d

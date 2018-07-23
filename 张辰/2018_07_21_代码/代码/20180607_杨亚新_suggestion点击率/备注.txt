@@ -1,0 +1,7 @@
+key:c_bnb_inn_searching_list_app
+c_bnb_inn_searching_list_h5
+
+type: 类型，
+地标:landMark，行政区:district，商业区:businessZ\
+
+one，民宿:product，直搜（keywords），取消（cancel）
