@@ -1,0 +1,21 @@
+
+
+----订单表里面取出visitsource是201的订单
+select d, count(orderid) from ods_htl_bnborderdb.order_header_v2 a where visitsource = 601 and d = '2018-06-14' group by d
+
+---- 每天机票界面点击民宿uv
+select a.d, count(DISTINCT newvalue.data['env_clientcode']) AS visitNumber
+from dw_mobdb.factmbtracelog_hybrid a
+where key in ('o_bnb_inn_detail_app','o_bnb_inn_detail_h5')
+AND get_json_object(value,'$.channelId') = 601
+And d ='2018-06-14'
+group by  a.d
+
+
+
+
+
+	
+	
+	
+	

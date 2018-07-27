@@ -1,0 +1,241 @@
+use bnb_hive_db;
+insert overwrite table bnb_orderinfo
+partition(d = '${zdt.addDay(-1).format("yyyy-MM-dd")}')
+select oo.* from (
+  -----客栈订单数据
+  select orderid
+    , orderdate as ordertime
+    , uid
+    , hotel as productid
+    , null as vendorid
+    , to_date(arrival) as checkin
+    , to_date(departure) as checkout
+    , ordquantity as days
+    , ordamount as orderamount
+    , orderstatus
+    , case when (ordertype_ubt is null and d<'2018-05-25') then '102'  --客栈未知来源
+           when (ordertype_ubt is null and d>'2018-05-24') then '101'  --客栈宫格
+           when ordertype_ubt = '直接订单' then '101'  --客栈宫格
+           else ordertype_ubt end as source
+    , cityid
+    , null as visitsource
+    , null as sellerid
+    , null as agent
+  	, null as cid
+  	, null as salesChannel
+  from dw_htlmaindb.FactHotelOrder_All_Inn
+  where d= '${zdt.format("yyyy-MM-dd")}'
+ --   and to_date(orderdate) < '${zdt.format("yyyy-MM-dd")}'
+    and to_date(orderdate) >= '2017-01-01'
+    and to_date(orderdate) < '${zdt.format("yyyy-MM-dd")}'
+    and (ordertype_ubt not in('hotel_order') or ordertype_ubt is null)
+
+  union all
+/*  -----老的民宿订单数据
+  select old.orderid
+    , old.ordertime
+    , old.uid
+    , old.productid
+    , old.vendorid
+    , old.checkin
+    , old.checkout
+    , old.days
+    , old.orderamount
+    , old.orderstatus
+    , '100-1' as source
+    , bsa.cityid
+    , null as visitsource
+    , null as sellerid
+    , null as agent
+  	, null as cid
+  	, null as salesChannel
+  from
+  (select ctriporderid as orderid
+      , createtime as ordertime
+      , uid
+      , productid
+      , vendorid
+      , checkin
+      , checkout
+      , datediff(to_date(checkout),to_date(checkin)) as days
+      , totalamount as orderamount
+      , statusid as orderstatus
+  from ods_htl_groupwormholedb.bnb_order
+  where d='${zdt.format("yyyy-MM-dd")}'
+   	and to_date(createtime) >='2017-01-01'
+   	and to_date(createtime) <'${zdt.format("yyyy-MM-dd")}'
+    and saleamount>=20) old
+  left join
+  (select spaceid
+    , cityid
+  from ods_htl_groupwormholedb.bnb_space_address
+  where d='${zdt.format("yyyy-MM-dd")}' ) bsa on old.productid = bsa.spaceid
+
+  union all */
+  -----新的民宿订单数据
+  select ohv.orderId as orderid
+    , ohv.createdtime as ordertime
+    , ohv.uid
+    , oi.productid
+    , oi.vendorid
+    , ois.checkin
+    , ois.checkout
+    , datediff(to_date(ois.checkout),to_date(ois.checkin)) as days
+    , oi.saleamount as orderamount
+    , ohv.orderstatusid as orderstatus
+    , '100' as source
+    , ois.cityid
+    , ohv.visitsource
+    , ohv.sellerid
+    , case when ohv.uid = '$seller-agent' then '1'
+      else '0' end as agent
+  	, ohv.clientid as cid
+  	, ohv.salesChannel
+  from
+  (select *
+  from ods_htl_bnborderdb.order_header_v2
+  where d='${zdt.format("yyyy-MM-dd")}'
+    and to_date(createdtime) >='2017-01-01'
+   	and to_date(createdtime) <'${zdt.format("yyyy-MM-dd")}'
+  ) ohv
+  inner join
+  ( select old.saleamount
+      ,old.vendorid
+      ,old.orderid
+      ,old.orderitemid
+      ,bsp.spaceid as productid
+    from
+    (select *
+    from ods_htl_bnborderdb.order_item
+    where d='${zdt.format("yyyy-MM-dd")}'
+      and saleamount >=20
+      and (statusid like '12%'   -- 支付成功
+      or statusid like '20%'   -- 待退款
+      or statusid like '22%'   -- 	部分退款
+      or statusid like '23%')  -- 已退款
+      and vendorid >= 114) old
+    inner join
+    (select productid
+      ,spaceid
+    from ods_htl_groupwormholedb.bnb_space_product
+    where d='${zdt.format("yyyy-MM-dd")}')bsp on old.productid = bsp.productid
+
+    union all
+
+    select saleamount
+      ,vendorid
+      ,orderid
+      ,orderitemid
+      ,productid
+    from ods_htl_bnborderdb.order_item
+    where d='${zdt.format("yyyy-MM-dd")}'
+      and saleamount >=20
+      and (statusid like '12%'
+        or statusid like '20%'
+        or statusid like '22%'
+        or statusid like '23%')
+      and vendorid < 114) oi on oi.orderid=ohv.orderid
+  inner join
+  (select *
+    from ods_htl_bnborderdb.order_item_space
+    where d='${zdt.format("yyyy-MM-dd")}') ois on ois.orderitemid=oi.orderitemid
+)oo
+
+--订单宽表（新）
+
+select orderid --订单ID
+      , ordertime --下单时间
+      , uid --携程下单用户UID
+      , conversion.vid --携程下单用户VID
+      , clientid as clientid --客户端ClientID(32开头的是安卓,12开头的是IOS,09开头是h5)
+      , contactsname as contactsname --联系人姓名
+      , orderstatus as orderstatus --订单状态
+      , checkin --入住时间
+      , checkout --离店时间
+      , ordercost --订单成本
+      , orderamount --售卖价格
+      , payamount --支付金额
+      , discountamount --优惠总金额
+      , null as realcost --真实成本
+      , refundamount --退款总金额
+      , refunddisamount -- 退款优惠总金额
+      , couponId --优惠券Id
+      , couponcode --券码
+      , cityId --城市Id
+      , serverfrom --订单来源
+      , vendorId --供应商Id
+      , terminal --android/ios/pc
+      , platform --App/Online/H5/WX
+      , visitsoure --宫格，酒店，机票
+      , category --民宿/客栈
+      , saleschannel --订单的销售渠道:1.携程直销,2分销
+      , sellerId --分销商ID,在分销模式下需要
+      , sellerorderid --分销商订单ID,在分销模式下需要
+      , invoice --是否开发票
+      , deposit --押金金额
+      , deposittype --押金类型
+      , allianceid --分销联盟ID
+      , alliancesid --分销联盟SID
+      , allianceouid --分销联盟OUID
+      , alliancesourceid --分销联盟SourceID
+      , giftid --礼品卡Id
+      , ext --扩展字段
+--      , d --时间分区
+from 
+    (select orderid 
+        , orderdate as ordertime
+        , uid as uid
+        , clientid as clientid
+        , case when uidname = '' then null else uidname end as contactsname
+        , orderstatus as orderstatus
+        , arrival as checkin
+        , departure as checkout
+        , ordcost as ordercost
+        , ordamount as orderamount
+        , ciiamount as payamount
+        , null as discountamount
+        , null as refundamount
+        , null as refunddisamount
+        , null as couponid
+        , null as couponcode
+        , cityid as cityid
+        , null as vendorId
+        , serverfrom as terminal
+        , submitfrom as platform
+        , null as visitsoure
+        , 2 as category 
+        , null as saleschannel
+        , null as sellerId
+        , null as sellerorderid
+        , null as invoice
+        , null as deposit
+        , null as deposittype
+        , allianceid as allianceid
+        , null as alliancesid
+        , null as allianceouid
+        , null as alliancesourceid
+        , case when paymenttype in ('TMONY','TMony') then 1 else 0 end as isgiftcard
+        , null as ext
+    from dwhtl.edw_htl_order_all_orderdate
+    where subchannel='h5_kezhan'
+      and d = '2018-07-26') hotel
+--    left outer join
+--    ( Dw_pubsharedb.factcoupon_BNB)
+--    on 
+    left outer join 
+    ( select input as clientid,output as vid from dw_mobdb.user_database_encryption where category = 'cid-vid') conversion
+    on a.clientid = conversion.clientid
+
+    union all
+
+    select orderid
+          , createdtime
+          , 
+
+      (select orderid from ods_htl_bnborderdb.order_header_v2 where d = '2018-07-26') a
+      left outer join
+      (select orderid,orderitemid from ods_htl_bnborderdb.order_item where d = '2018-07-26') b
+      on a.orderid =b.orderid
+      left outer join 
+      (select orderitemid from ods_htl_bnborderdb.order_item_space where d = '2018-07-26') c
+      on b.orderitemid = c.orderitemid

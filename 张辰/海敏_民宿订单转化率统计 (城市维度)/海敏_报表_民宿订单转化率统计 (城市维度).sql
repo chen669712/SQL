@@ -453,8 +453,8 @@ from  (select get_json_object(value, '$.cityid') as cityid
          , count(distinct newvalue.data['env_clientcode']) as visitnumber
       from dw_mobdb.factmbtracelog_hybrid
       where d = "$effectdate('yyyy-MM-dd',-1)"
-        and key in ('100641','bnb_inn_list_app_basic')
-      group by get_json_object( VALUE, '$.cityid')
+        and key = 'bnb_inn_list_app_basic'
+      group by get_json_object( value, '$.cityid')
       ) a        
       inner join  
       (select t3.cityid
@@ -866,3 +866,1274 @@ JOIN (SELECT 'all' as `all`,count(om.orderid) AS orderNumber
 order by  `日支付订单数` desc,`周支付订单数` desc,`月支付订单数` desc,`日转化率` desc，`周转化率` desc，`月转化率` desc
 limit 10000
 
+
+------------------------------------报表(测试,城市,报表)-------------------------------------------------------
+SELECT 
+    city.cityname as cityname
+  , a.visitNumber as dau
+  , b.ois as order_d
+  , concat_ws('',cast(round((b.ois*100)/a.visitNumber, 2) as string),'%') as conversion_d 
+  , c.ois as bnborder_d
+  , d.ois as hotelorder_d
+  , e.visitNumber as wau
+  , f.ois as order_w
+  , concat_ws('',cast(round((f.ois*100)/e.visitNumber, 2) as string),'%') as conversion_w
+  , g.ois as bnborder_w
+  , h.ois as hotelorder_w
+  , i.visitNumber as mau
+  , j.ois as order_m
+  , concat_ws('',cast(round((j.ois*100)/i.visitNumber, 2) as string),'%') as conversion_m
+  , k.ois as bnborder_m
+  , l.ois as hotelorder_m
+--使用搜索的用户数
+from  
+(select get_json_object(value, '$.cityid') as cityid
+         , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d = "$effectdate('yyyy-MM-dd',-1)"
+  and key = 'bnb_inn_list_app_basic'
+group by get_json_object(value, '$.cityid')
+) a        
+inner join
+--日客栈民宿订单  
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d="$effectdate('yyyy-MM-dd',0)"
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d="$effectdate('yyyy-MM-dd',0)"
+    where substring(b1.createdtime,0,10)>="$effectdate('yyyy-MM-dd',-1)"
+      and substring(b1.createdtime,0,10)<"$effectdate('yyyy-MM-dd',0)"
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d="$effectdate('yyyy-MM-dd',0)" and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>="$effectdate('yyyy-MM-dd',-1)"
+      and substring(orderdate,0,10)<"$effectdate('yyyy-MM-dd',0)"
+      and d ="$effectdate('yyyy-MM-dd',0)" 
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) b 
+on a.cityId = b.cityId
+inner join
+--日民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d="$effectdate('yyyy-MM-dd',0)"
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d="$effectdate('yyyy-MM-dd',0)"
+  where substring(b1.createdtime,0,10)>="$effectdate('yyyy-MM-dd',-1)"
+    and substring(b1.createdtime,0,10)<"$effectdate('yyyy-MM-dd',0)"
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d="$effectdate('yyyy-MM-dd',0)" and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) c
+on a.cityid = c.cityid 
+inner join
+--日客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>="$effectdate('yyyy-MM-dd',-1)"
+        and substring(orderdate,0,10)<"$effectdate('yyyy-MM-dd',0)"
+        and d ="$effectdate('yyyy-MM-dd',0)" 
+      ) t2
+group by t2.cityid
+) d
+on a.cityid = d.cityid 
+inner join
+--周用户
+(select get_json_object(value, '$.cityid') as cityid
+    , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d >= "$effectdate('yyyy-MM-dd',-7)"
+  and d <= "$effectdate('yyyy-MM-dd',-1)"
+  and key = 'bnb_inn_list_app_basic'
+group by get_json_object(value, '$.cityid')
+) e on a.cityId = e.cityId
+inner join
+--周民宿客栈订单
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d="$effectdate('yyyy-MM-dd',0)"
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d="$effectdate('yyyy-MM-dd',0)"
+    where substring(b1.createdtime,0,10)>="$effectdate('yyyy-MM-dd',-7)"
+      and substring(b1.createdtime,0,10)<="$effectdate('yyyy-MM-dd',-1)"
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d="$effectdate('yyyy-MM-dd',0)" and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>="$effectdate('yyyy-MM-dd',-7)"
+      and substring(orderdate,0,10)<="$effectdate('yyyy-MM-dd',-1)"
+      and d ="$effectdate('yyyy-MM-dd',0)" 
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) f on a.cityId = f.cityId
+inner join
+--周民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d="$effectdate('yyyy-MM-dd',0)"
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d="$effectdate('yyyy-MM-dd',0)"
+  where substring(b1.createdtime,0,10)>="$effectdate('yyyy-MM-dd',-7)"
+    and substring(b1.createdtime,0,10)<="$effectdate('yyyy-MM-dd',-1)"
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d="$effectdate('yyyy-MM-dd',0)" and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) g
+on a.cityid = g.cityid 
+inner join
+--周客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>="$effectdate('yyyy-MM-dd',-7)"
+        and substring(orderdate,0,10)<"$effectdate('yyyy-MM-dd',-1)"
+        and d ="$effectdate('yyyy-MM-dd',0)" 
+      ) t2
+group by t2.cityid
+) h
+on a.cityid = h.cityid
+inner join
+--月用户
+(select get_json_object(value, '$.cityid') as cityid
+    , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d >= "$effectdate('yyyy-MM-dd',-30)"
+  and d <= "$effectdate('yyyy-MM-dd',-1)"
+  and key = 'bnb_inn_list_app_basic'
+group by get_json_object(value, '$.cityid')
+) i on a.cityId = i.cityId
+inner join
+--月民宿客栈订单
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d="$effectdate('yyyy-MM-dd',0)"
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d="$effectdate('yyyy-MM-dd',0)"
+    where substring(b1.createdtime,0,10)>="$effectdate('yyyy-MM-dd',-30)"
+      and substring(b1.createdtime,0,10)<="$effectdate('yyyy-MM-dd',-1)"
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d="$effectdate('yyyy-MM-dd',0)" and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>="$effectdate('yyyy-MM-dd',-30)"
+      and substring(orderdate,0,10)<="$effectdate('yyyy-MM-dd',-1)"
+      and d ="$effectdate('yyyy-MM-dd',0)" 
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) j on a.cityId = j.cityId
+inner join
+--月民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d="$effectdate('yyyy-MM-dd',0)"
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d="$effectdate('yyyy-MM-dd',0)"
+  where substring(b1.createdtime,0,10)>="$effectdate('yyyy-MM-dd',-30)"
+    and substring(b1.createdtime,0,10)<="$effectdate('yyyy-MM-dd',-1)"
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d="$effectdate('yyyy-MM-dd',0)" and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) k
+on a.cityid = k.cityid 
+inner join
+--月客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>="$effectdate('yyyy-MM-dd',-30)"
+        and substring(orderdate,0,10)<="$effectdate('yyyy-MM-dd',-1)"
+        and d ="$effectdate('yyyy-MM-dd',0)" 
+      ) t2
+group by t2.cityid
+) l
+on a.cityid = l.cityid 
+join ods_htl_groupwormholedb.bnb_city city on a.cityid = city.cityid and city.d = "$effectdate('yyyy-MM-dd',0)"
+
+------------------------------------报表(测试,汇总)-------------------------------------------------------
+SELECT 
+    city.cityname as cityname
+  , a.visitNumber as dau
+  , b.ois as order_d
+  , concat_ws('',cast(round((b.ois*100)/a.visitNumber, 2) as string),'%') as conversion_d 
+  , c.ois as bnborder_d
+  , d.ois as hotelorder_d
+  , e.visitNumber as wau
+  , f.ois as order_w
+  , concat_ws('',cast(round((f.ois*100)/e.visitNumber, 2) as string),'%') as conversion_w
+  , g.ois as bnborder_w
+  , h.ois as hotelorder_w
+  , i.visitNumber as mau
+  , j.ois as order_m
+  , concat_ws('',cast(round((j.ois*100)/i.visitNumber, 2) as string),'%') as conversion_m
+  , k.ois as bnborder_m
+  , l.ois as hotelorder_m
+--使用搜索的用户数
+from  
+(select 
+ `汇总` as cityname
+    , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d = '2018-07-17'
+  and key = 'bnb_inn_list_app_basic'
+group by `汇总`
+) a        
+inner join
+--日客栈民宿订单  
+(select `汇总` as `城市名称`
+          , sum (t3.ois) as ois
+from
+  (select count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-18'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-18'
+    where substring(b1.createdtime,0,10)>='2018-07-17'
+      and substring(b1.createdtime,0,10)<'2018-07-18'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-18' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    union all
+    select round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-07-17'
+      and substring(orderdate,0,10)<'2018-07-18'
+      and d ='2018-07-18' 
+    ) t2
+  ) t3 
+  group by `汇总`
+) b 
+on a.`汇总` = b.`汇总`
+inner join
+--日民宿订单
+(select `汇总` as `城市名称`
+    ,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-18'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-18'
+  where substring(b1.createdtime,0,10)>='2018-07-17'
+    and substring(b1.createdtime,0,10)<'2018-07-18'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-18' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+) c
+on a.`汇总` = c.`汇总` 
+inner join
+--日客栈订单
+(select `汇总` as `城市名称`
+  ,round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-07-17'
+        and substring(orderdate,0,10)<'2018-07-18'
+        and d ='2018-07-18' 
+      ) t2
+) d
+on a.`汇总` = d.`汇总` 
+inner join
+--周用户
+(select `汇总` as `城市名称`
+  ,count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d >= '2018-07-11'
+  and d <= '2018-07-17'
+  and key = 'bnb_inn_list_app_basic'
+) e on a.`汇总` = e.`汇总`
+inner join
+--周民宿客栈订单
+(select `汇总` as `城市名称`
+          , sum (t3.ois) as ois
+from
+  (select count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-18'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-18'
+    where substring(b1.createdtime,0,10)>='2018-07-11'
+      and substring(b1.createdtime,0,10)<='2018-07-17'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-18' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    union all
+    select round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-07-11'
+      and substring(orderdate,0,10)<='2018-07-17'
+      and d ='2018-07-18' 
+    ) t2
+  ) t3 
+  group by `汇总`
+) f on a.`汇总` = f.`汇总`
+inner join
+--周民宿订单
+(select `汇总` as `城市名称`,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-18'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-18'
+  where substring(b1.createdtime,0,10)>='2018-07-11'
+    and substring(b1.createdtime,0,10)<='2018-07-17'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-18' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by `汇总`
+) g
+on a.`汇总` = g.`汇总` 
+inner join
+--周客栈订单
+(select `汇总` as `城市名称`
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-07-11'
+        and substring(orderdate,0,10)<'2018-07-17'
+        and d ='2018-07-18' 
+      ) t2
+      group by `汇总`
+) h
+on a.`汇总` = h.`汇总`
+--月用户
+(select `汇总` as `城市名称`
+    , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d >= '2018-06-18'
+  and d <= '2018-07-17'
+  and key = 'bnb_inn_list_app_basic'
+) i on a.`汇总` = i.`汇总`
+inner join
+--月民宿客栈订单
+(select `汇总` as `城市名称`
+          , sum (t3.ois) as ois
+from
+  (select count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-18'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-18'
+    where substring(b1.createdtime,0,10)>='2018-06-18'
+      and substring(b1.createdtime,0,10)<='2018-07-17'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-18' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    union all
+    select round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-06-18'
+      and substring(orderdate,0,10)<='2018-07-17'
+      and d ='2018-07-18' 
+    ) t2
+  ) t3 
+  group by `汇总` 
+) j on a.`汇总` = j.`汇总`
+inner join
+--月民宿订单
+(select `汇总` as `城市名称`,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-18'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-18'
+  where substring(b1.createdtime,0,10)>='2018-06-18'
+    and substring(b1.createdtime,0,10)<='2018-07-17'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-18' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by `汇总`
+) k
+on a.`汇总` = k.`汇总` 
+inner join
+--月客栈订单
+(select `汇总` as `城市名称`
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-06-18'
+        and substring(orderdate,0,10)<='2018-07-17'
+        and d ='2018-07-18' 
+      ) t2
+) l
+on a.`汇总` = l.`汇总`
+join ods_htl_groupwormholedb.bnb_city city on a.cityid = city.cityid and city.d = '2018-07-18'
+
+------------------------------------报表(测试,城市,数据)-------------------------------------------------------
+SELECT 
+    city.cityname as cityname
+  , a.visitNumber as dau
+  , b.ois as order_d
+  , concat_ws('',cast(round((b.ois*100)/a.visitNumber, 2) as string),'%') as conversion_d 
+  , c.ois as bnborder_d
+  , d.ois as hotelorder_d
+  , e.visitNumber as wau
+  , f.ois as order_w
+  , concat_ws('',cast(round((f.ois*100)/e.visitNumber, 2) as string),'%') as conversion_w
+  , g.ois as bnborder_w
+  , h.ois as hotelorder_w
+  , i.visitNumber as mau
+  , j.ois as order_m
+  , concat_ws('',cast(round((j.ois*100)/i.visitNumber, 2) as string),'%') as conversion_m
+  , k.ois as bnborder_m
+  , l.ois as hotelorder_m
+--使用搜索的用户数
+from  
+(select get_json_object(value, '$.cityid') as cityid
+         , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d = '2018-07-19'
+  and key = 'bnb_inn_list_app_basic'
+group by get_json_object(value, '$.cityid')
+) a        
+inner join
+--日客栈民宿订单  
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+    where substring(b1.createdtime,0,10)>='2018-07-19'
+      and substring(b1.createdtime,0,10)<'2018-07-20'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-07-19'
+      and substring(orderdate,0,10)<'2018-07-20'
+      and d ='2018-07-20'
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) b 
+on a.cityId = b.cityId
+inner join
+--日民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+  where substring(b1.createdtime,0,10)>='2018-07-19'
+    and substring(b1.createdtime,0,10)<'2018-07-20'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) c
+on a.cityid = c.cityid 
+inner join
+--日客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-07-19'
+        and substring(orderdate,0,10)<'2018-07-20'
+        and d ='2018-07-20' 
+      ) t2
+group by t2.cityid
+) d
+on a.cityid = d.cityid 
+inner join
+--周用户
+(select get_json_object(value, '$.cityid') as cityid
+    , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d >= '2018-07-13'
+  and d <= '2018-07-19'
+  and key = 'bnb_inn_list_app_basic'
+group by get_json_object(value, '$.cityid')
+) e on a.cityId = e.cityId
+inner join
+--周民宿客栈订单
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+    where substring(b1.createdtime,0,10)>='2018-07-13'
+      and substring(b1.createdtime,0,10)<='2018-07-19'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-07-13'
+      and substring(orderdate,0,10)<='2018-07-19'
+      and d ='2018-07-20'
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) f on a.cityId = f.cityId
+inner join
+--周民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+  where substring(b1.createdtime,0,10)>='2018-07-13'
+    and substring(b1.createdtime,0,10)<='2018-07-19'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) g
+on a.cityid = g.cityid 
+inner join
+--周客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-07-13'
+        and substring(orderdate,0,10)<'2018-07-19'
+        and d ='2018-07-20'
+      ) t2
+group by t2.cityid
+) h
+on a.cityid = h.cityid
+inner join
+--月用户
+(select get_json_object(value, '$.cityid') as cityid
+    , count(distinct newvalue.data['env_clientcode']) as visitnumber
+from dw_mobdb.factmbtracelog_hybrid
+where d >= '2018-06-20'
+  and d <= '2018-07-19'
+  and key = 'bnb_inn_list_app_basic'
+group by get_json_object(value, '$.cityid')
+) i on a.cityId = i.cityId
+inner join
+--月民宿客栈订单
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+    where substring(b1.createdtime,0,10)>='2018-06-20'
+      and substring(b1.createdtime,0,10)<='2018-07-19'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-06-20'
+      and substring(orderdate,0,10)<='2018-07-19'
+      and d ='2018-07-20' 
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) j on a.cityId = j.cityId
+inner join
+--月民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+  where substring(b1.createdtime,0,10)>='2018-06-20'
+    and substring(b1.createdtime,0,10)<='2018-07-19'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) k
+on a.cityid = k.cityid 
+inner join
+--月客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-06-20'
+        and substring(orderdate,0,10)<='2018-07-19'
+        and d ='2018-07-20'
+      ) t2
+group by t2.cityid
+) l
+on a.cityid = l.cityid 
+join ods_htl_groupwormholedb.bnb_city city on a.cityid = city.cityid and city.d = '2018-07-20'
+
+------------------------------------报表(测试,城市,数据,bnb_hive_db.bnb_tracelog)-------------------------------------------------------
+SELECT 
+    city.cityname as cityname
+  , a.visitNumber as dau
+  , b.ois as order_d
+  , concat_ws('',cast(round((b.ois*100)/a.visitNumber, 2) as string),'%') as conversion_d 
+  , c.ois as bnborder_d
+  , d.ois as hotelorder_d
+  , e.visitNumber as wau
+  , f.ois as order_w
+  , concat_ws('',cast(round((f.ois*100)/e.visitNumber, 2) as string),'%') as conversion_w
+  , g.ois as bnborder_w
+  , h.ois as hotelorder_w
+  , i.visitNumber as mau
+  , j.ois as order_m
+  , concat_ws('',cast(round((j.ois*100)/i.visitNumber, 2) as string),'%') as conversion_m
+  , k.ois as bnborder_m
+  , l.ois as hotelorder_m
+--使用搜索的用户数
+from  
+(select cityname
+         , count(distinct cid) as visitnumber
+from bnb_hive_db.bnb_tracelog
+where d = '2018-07-19'
+  and key = 'bnb_inn_list_app_basic'
+group by cityname
+) a 
+inner join ods_htl_groupwormholedb.bnb_city city on a.cityname = city.cityname and city.d = '2018-07-20'       
+inner join
+--日客栈民宿订单  
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+    where substring(b1.createdtime,0,10)>='2018-07-19'
+      and substring(b1.createdtime,0,10)<'2018-07-20'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-07-19'
+      and substring(orderdate,0,10)<'2018-07-20'
+      and d ='2018-07-20'
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) b 
+on city.cityId = b.cityId
+inner join
+--日民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+  where substring(b1.createdtime,0,10)>='2018-07-19'
+    and substring(b1.createdtime,0,10)<'2018-07-20'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) c
+on city.cityid = c.cityid 
+inner join
+--日客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-07-19'
+        and substring(orderdate,0,10)<'2018-07-20'
+        and d ='2018-07-20' 
+      ) t2
+group by t2.cityid
+) d
+on city.cityid = d.cityid 
+inner join
+--周用户
+(select cityname
+    , count(distinct cid) as visitnumber
+from bnb_hive_db.bnb_tracelog
+where d >= '2018-07-13'
+  and d <= '2018-07-19'
+  and key = 'bnb_inn_list_app_basic'
+group by cityname
+) e on city.cityname = e.cityname
+inner join
+--周民宿客栈订单
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+    where substring(b1.createdtime,0,10)>='2018-07-13'
+      and substring(b1.createdtime,0,10)<='2018-07-19'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-07-13'
+      and substring(orderdate,0,10)<='2018-07-19'
+      and d ='2018-07-20'
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) f on city.cityId = f.cityId
+inner join
+--周民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+  where substring(b1.createdtime,0,10)>='2018-07-13'
+    and substring(b1.createdtime,0,10)<='2018-07-19'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) g
+on city.cityid = g.cityid 
+inner join
+--周客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-07-13'
+        and substring(orderdate,0,10)<'2018-07-19'
+        and d ='2018-07-20'
+      ) t2
+group by t2.cityid
+) h
+on city.cityid = h.cityid
+inner join
+--月用户
+(select cityname
+    , count(distinct cid) as visitnumber
+from bnb_hive_db.bnb_tracelog
+where d >= '2018-06-20'
+  and d <= '2018-07-19'
+  and key = 'bnb_inn_list_app_basic'
+group by cityname
+) i on city.cityname = i.cityname
+inner join
+--月民宿客栈订单
+(select t3.cityid
+          , sum (t3.ois) as ois
+from
+  (select t1.cityid,count(distinct t1.orderid) as ois from
+    (select distinct a1.orderid
+              , c1.cityid
+    from ods_htl_bnborderdb.order_item a1
+    left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+    left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+    where substring(b1.createdtime,0,10)>='2018-06-20'
+      and substring(b1.createdtime,0,10)<='2018-07-19'
+      and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+      and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+      and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+    ) t1
+    group by t1.cityid
+    union all
+    select t2.cityid
+            , round(count(distinct t2.orderid)*0.85,0) as ois
+    from  
+    (select cityid
+          ,orderid
+    from dw_htlmaindb.FactHotelOrder_All_Inn
+    where substring(orderdate,0,10)>='2018-06-20'
+      and substring(orderdate,0,10)<='2018-07-19'
+      and d ='2018-07-20' 
+    ) t2
+    group by t2.cityid
+  ) t3 
+  group by t3.cityid
+) j on city.cityId = j.cityId
+inner join
+--月民宿订单
+(select t1.cityid,count(distinct t1.orderid) as ois from
+  (select distinct a1.orderid
+              , c1.cityid
+  from ods_htl_bnborderdb.order_item a1
+  left join ods_htl_bnborderdb.order_header_v2 b1 on a1.orderid=b1.orderid and b1.d='2018-07-20'
+  left join ods_htl_bnborderdb.order_item_space c1 on c1.orderitemid=a1.orderitemid and c1.d='2018-07-20'
+  where substring(b1.createdtime,0,10)>='2018-06-20'
+    and substring(b1.createdtime,0,10)<='2018-07-19'
+    and b1.visitsource in (0, 20, 70, 120, 130, 201, 203, 205)
+    and (a1.statusid like '12%' OR a1.statusid like '20%' OR a1.statusid like '22%' OR a1.statusid like '23%')
+    and a1.saleamount>=20 and a1.d='2018-07-20' and b1.sellerid=0 and b1.terminalType=10
+  ) t1
+  group by t1.cityid
+) k
+on city.cityid = k.cityid 
+inner join
+--月客栈订单
+(select t2.cityid
+    , round(count(distinct t2.orderid)*0.85,0) as ois
+from  (select cityid
+            ,orderid
+      from dw_htlmaindb.FactHotelOrder_All_Inn
+      where substring(orderdate,0,10)>='2018-06-20'
+        and substring(orderdate,0,10)<='2018-07-19'
+        and d ='2018-07-20'
+      ) t2
+group by t2.cityid
+) l
+on city.cityid = l.cityid 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+inner join
+( SELECT ois.cityId
+      , count(oh.orderId) AS orderNumber
+    FROM ods_htl_bnborderdb.order_header_v2 oh,
+      ods_htl_bnborderdb.order_item oi,
+      ods_htl_bnborderdb.order_item_space ois
+    WHERE oh.orderId = oi.orderId 
+      AND oi.orderItemId = ois.orderItemId 
+      AND oh.payStatusId IN (12, 20, 22, 23)
+      AND ois.cityId IS NOT NULL
+      AND oh.createdTime <= "$effectdate('yyyy-MM-dd',-1)" 
+      AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-8)" 
+      AND oh.salesChannel = 1 
+      AND oh.visitsource NOT IN (14, 18)
+      AND oh.d = "$effectdate('yyyy-MM-dd',0)"  
+      AND oi.d = "$effectdate('yyyy-MM-dd',0)"  
+      AND ois.d = "$effectdate('yyyy-MM-dd',0)" 
+    GROUP BY ois.cityId) g ON e.cityId = g.cityId
+JOIN
+( SELECT om.cityId
+      , count(om.orderid) AS orderNumber
+    FROM dw_htlmaindb.facthotelorder_all_inn om
+    LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+    WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')  
+      AND om.orderdate <= "$effectdate('yyyy-MM-dd',-1)" 
+      AND om.orderdate >= "$effectdate('yyyy-MM-dd',-8)" 
+      AND om.d = "$effectdate('yyyy-MM-dd',0)"
+    GROUP BY om.cityId ) h ON e.cityId = h.cityId
+JOIN
+(SELECT get_json_object(value, '$.cityid') AS cityid
+         , count(DISTINCT newvalue.data['env_clientcode']) AS visitNumber
+  FROM dw_mobdb.factmbtracelog_hybrid
+  WHERE d <= "$effectdate('yyyy-MM-dd',-1)"
+    AND d >= "$effectdate('yyyy-MM-dd',-31)" 
+    AND KEY IN ('100641','bnb_inn_list_app_basic')
+  GROUP BY get_json_object( VALUE, '$.cityid')) i  
+ON a.cityid = i.cityid
+JOIN 
+( select t3.cityId
+    ,sum(t3.orderNumber) AS orderNumber
+  from (
+    SELECT ois.cityId
+      , count(oh.orderId) AS orderNumber
+    FROM ods_htl_bnborderdb.order_header_v2 oh,
+      ods_htl_bnborderdb.order_item oi,
+      ods_htl_bnborderdb.order_item_space ois
+    WHERE oh.orderId = oi.orderId 
+      AND oi.orderItemId = ois.orderItemId 
+      AND oh.payStatusId IN (12, 20, 22, 23)
+      AND oh.createdTime <= "$effectdate('yyyy-MM-dd',-1)" 
+      AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-31)" 
+      AND oh.salesChannel = 1 
+      AND oh.visitsource NOT IN (14, 18)
+      AND oh.d = "$effectdate('yyyy-MM-dd',0)"  
+      AND oi.d = "$effectdate('yyyy-MM-dd',0)"  
+      AND ois.d = "$effectdate('yyyy-MM-dd',0)" 
+    GROUP BY ois.cityId    
+    UNION ALL    
+    SELECT om.cityId
+      , count(om.orderid) AS orderNumber
+    FROM dw_htlmaindb.facthotelorder_all_inn om
+    LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+    WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')
+      AND om.orderdate <= "$effectdate('yyyy-MM-dd',-1)" 
+      AND om.orderdate >= "$effectdate('yyyy-MM-dd',-31)" 
+      AND om.d ="$effectdate('yyyy-MM-dd',0)" 
+    GROUP BY om.cityId ) t3 
+group by cityId ) j ON i.cityId = j.cityId
+JOIN
+( SELECT ois.cityId
+      , count(oh.orderId) AS orderNumber
+    FROM ods_htl_bnborderdb.order_header_v2 oh,
+      ods_htl_bnborderdb.order_item oi,
+      ods_htl_bnborderdb.order_item_space ois
+    WHERE oh.orderId = oi.orderId 
+      AND oi.orderItemId = ois.orderItemId 
+      AND oh.payStatusId IN (12, 20, 22, 23)
+      AND ois.cityId IS NOT NULL
+      AND oh.createdTime <= "$effectdate('yyyy-MM-dd',-1)" 
+      AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-31)" 
+      AND oh.salesChannel = 1 
+      AND oh.visitsource NOT IN (14, 18)
+      AND oh.d = "$effectdate('yyyy-MM-dd',0)"  
+      AND oi.d = "$effectdate('yyyy-MM-dd',0)"  
+      AND ois.d = "$effectdate('yyyy-MM-dd',0)" 
+    GROUP BY ois.cityId) k ON i.cityId = k.cityId
+JOIN
+( SELECT om.cityId
+      , count(om.orderid) AS orderNumber
+    FROM dw_htlmaindb.facthotelorder_all_inn om
+    LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+    WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')  
+      AND om.orderdate <= "$effectdate('yyyy-MM-dd',-1)" 
+      AND om.orderdate >= "$effectdate('yyyy-MM-dd',-31)" 
+      AND om.d = "$effectdate('yyyy-MM-dd',0)"
+    GROUP BY om.cityId ) l ON i.cityId = l.cityId
+JOIN ods_htl_groupwormholedb.bnb_city m ON i.cityId = m.cityId AND m.d = "$effectdate('yyyy-MM-dd',0)"
+UNION ALL
+SELECT '汇总' as `城市名称`
+  , n.visitNumber  as `dau`
+  , o.orderNumber as `日支付订单数`
+  , p.orderNumber as `日民宿订单数`
+  , q.orderNumber as `日客栈订单数`
+  , concat_ws('',cast(round((o.orderNumber*100)/n.visitNumber,2) as string),'%') as `日转化率`
+  , r.visitNumber  as `wau`
+  , s.orderNumber as `周支付订单数`
+  , t.orderNumber as `周民宿订单数`
+  , u.orderNumber as `周客栈订单数`
+  , concat_ws('',cast(round((s.orderNumber*100)/r.visitNumber,2) as string),'%') as `周转化率`
+  , v.visitNumber  as `mau`
+  , w.orderNumber as `月支付订单数`
+  , x.orderNumber as `月民宿订单数`
+  , y.orderNumber as `月客栈订单数`
+  , concat_ws('',cast(round((w.orderNumber*100)/v.visitNumber,2) as string),'%') as `月转化率`
+FROM (
+  SELECT 'all' as `all`
+    , count(DISTINCT newvalue.data['env_clientcode']) AS visitNumber
+  FROM dw_mobdb.factmbtracelog_hybrid
+  WHERE d = date_add('2018-06-26',-1) 
+    AND KEY IN ('100641','bnb_inn_list_app_basic') ) n
+JOIN (
+    select 'all' as `all`
+      , sum(t4.orderNumber) AS orderNumber 
+    from (
+      SELECT count(oh.orderId) AS orderNumber
+      FROM ods_htl_bnborderdb.order_header_v2 oh,
+        ods_htl_bnborderdb.order_item oi,
+        ods_htl_bnborderdb.order_item_space ois
+      WHERE oh.orderId = oi.orderId 
+        AND oi.orderItemId = ois.orderItemId 
+        AND oh.payStatusId IN (12, 20, 22, 23)
+        AND ois.cityId IS NOT NULL
+        AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-1)"
+        AND oh.createdTime < "$effectdate('yyyy-MM-dd',0)" 
+        AND oh.salesChannel = 1 
+        AND oh.visitsource NOT IN (14, 18)
+        AND oh.d = "$effectdate('yyyy-MM-dd',0)" 
+        AND oi.d = "$effectdate('yyyy-MM-dd',0)"
+        AND ois.d = "$effectdate('yyyy-MM-dd',0)" 
+      UNION ALL
+      SELECT count(om.orderid) AS orderNumber
+      FROM dw_htlmaindb.facthotelorder_all_inn om 
+      LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+      WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')
+        AND om.orderdate >= "$effectdate('yyyy-MM-dd',-1)" 
+        AND om.orderdate<"$effectdate('yyyy-MM-dd',0)" 
+        AND om.d = "$effectdate('yyyy-MM-dd',0)" ) t4 
+  ) o ON n.all = o.all
+JOIN (SELECT 'all' as `all`,count(oh.orderId) AS orderNumber
+      FROM ods_htl_bnborderdb.order_header_v2 oh,
+        ods_htl_bnborderdb.order_item oi,
+        ods_htl_bnborderdb.order_item_space ois
+      WHERE oh.orderId = oi.orderId 
+        AND oi.orderItemId = ois.orderItemId 
+        AND oh.payStatusId IN (12, 20, 22, 23)
+        AND ois.cityId IS NOT NULL
+        AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-1)"
+        AND oh.createdTime < "$effectdate('yyyy-MM-dd',0)" 
+        AND oh.salesChannel = 1 
+        AND oh.visitsource NOT IN (14, 18)
+        AND oh.d = "$effectdate('yyyy-MM-dd',0)"
+        AND oi.d = "$effectdate('yyyy-MM-dd',0)"
+        AND ois.d = "$effectdate('yyyy-MM-dd',0)" 
+) p ON n.all = p.all
+JOIN (
+      SELECT 'all' as `all`,count(om.orderid) AS orderNumber
+      FROM dw_htlmaindb.facthotelorder_all_inn om 
+      LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+      WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')
+        AND om.orderdate >= "$effectdate('yyyy-MM-dd',-1)" 
+        AND om.orderdate<"$effectdate('yyyy-MM-dd',0)" 
+        AND om.d = "$effectdate('yyyy-MM-dd',0)" 
+) q ON n.all = q.all 
+JOIN 
+(
+  SELECT 'all' as `all`
+    , count(DISTINCT newvalue.data['env_clientcode']) AS visitNumber
+  FROM dw_mobdb.factmbtracelog_hybrid
+  WHERE d <= "$effectdate('yyyy-MM-dd',-1)"
+    AND d >= "$effectdate('yyyy-MM-dd',-8)"
+    AND KEY IN ('100641','bnb_inn_list_app_basic') ) r ON n.all = r.all
+JOIN (
+    select 'all' as `all`
+      , sum(t5.orderNumber) AS orderNumber 
+    from (
+      SELECT count(oh.orderId) AS orderNumber
+      FROM ods_htl_bnborderdb.order_header_v2 oh,
+        ods_htl_bnborderdb.order_item oi,
+        ods_htl_bnborderdb.order_item_space ois
+      WHERE oh.orderId = oi.orderId 
+        AND oi.orderItemId = ois.orderItemId 
+        AND oh.payStatusId IN (12, 20, 22, 23)
+        AND ois.cityId IS NOT NULL
+        AND oh.createdTime <= "$effectdate('yyyy-MM-dd',-1)"
+        AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-8)" 
+        AND oh.salesChannel = 1 
+        AND oh.visitsource NOT IN (14, 18)
+        AND oh.d = "$effectdate('yyyy-MM-dd',0)" 
+        AND oi.d = "$effectdate('yyyy-MM-dd',0)"
+        AND ois.d = "$effectdate('yyyy-MM-dd',0)" 
+      UNION ALL
+      SELECT count(om.orderid) AS orderNumber
+      FROM dw_htlmaindb.facthotelorder_all_inn om 
+      LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+      WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')
+        AND om.orderdate <= "$effectdate('yyyy-MM-dd',-1)"
+        AND om.orderdate >= "$effectdate('yyyy-MM-dd',-8)" 
+        AND om.d = "$effectdate('yyyy-MM-dd',-1)" ) t5 
+  ) s ON r.all = s.all
+JOIN (SELECT 'all' as `all`,count(oh.orderId) AS orderNumber
+      FROM ods_htl_bnborderdb.order_header_v2 oh,
+        ods_htl_bnborderdb.order_item oi,
+        ods_htl_bnborderdb.order_item_space ois
+      WHERE oh.orderId = oi.orderId 
+        AND oi.orderItemId = ois.orderItemId 
+        AND oh.payStatusId IN (12, 20, 22, 23)
+        AND ois.cityId IS NOT NULL
+        AND oh.createdTime <= "$effectdate('yyyy-MM-dd',-1)"
+        AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-8)" 
+        AND oh.salesChannel = 1 
+        AND oh.visitsource NOT IN (14, 18)
+        AND oh.d = "$effectdate('yyyy-MM-dd',0)" 
+        AND oi.d = "$effectdate('yyyy-MM-dd',0)" 
+        AND ois.d = "$effectdate('yyyy-MM-dd',0)"  
+) t ON r.all = t.all
+JOIN (SELECT 'all' as `all`,count(om.orderid) AS orderNumber
+      FROM dw_htlmaindb.facthotelorder_all_inn om 
+      LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+      WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')
+        AND om.orderdate <= "$effectdate('yyyy-MM-dd',-1)" 
+        AND om.orderdate >= "$effectdate('yyyy-MM-dd',-8)"   
+        AND om.d = "$effectdate('yyyy-MM-dd',0)"  
+) u ON r.all = u.all 
+JOIN
+( SELECT 'all' as `all`
+    , count(DISTINCT newvalue.data['env_clientcode']) AS visitNumber
+  FROM dw_mobdb.factmbtracelog_hybrid
+  WHERE d <= "$effectdate('yyyy-MM-dd',-1)" 
+    AND d >= "$effectdate('yyyy-MM-dd',-31)" 
+    AND KEY IN ('100641','bnb_inn_list_app_basic') ) v ON n.all = v.all
+JOIN (
+    select 'all' as `all`
+      , sum(t6.orderNumber) AS orderNumber 
+    from (
+      SELECT count(oh.orderId) AS orderNumber
+      FROM ods_htl_bnborderdb.order_header_v2 oh,
+        ods_htl_bnborderdb.order_item oi,
+        ods_htl_bnborderdb.order_item_space ois
+      WHERE oh.orderId = oi.orderId 
+        AND oi.orderItemId = ois.orderItemId 
+        AND oh.payStatusId IN (12, 20, 22, 23)
+        AND ois.cityId IS NOT NULL
+        AND oh.createdTime <= "$effectdate('yyyy-MM-dd',-1)" 
+        AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-31)"  
+        AND oh.salesChannel = 1 
+        AND oh.visitsource NOT IN (14, 18)
+        AND oh.d = "$effectdate('yyyy-MM-dd',0)"  
+        AND oi.d = "$effectdate('yyyy-MM-dd',0)" 
+        AND ois.d = "$effectdate('yyyy-MM-dd',0)"  
+      UNION ALL
+      SELECT count(om.orderid) AS orderNumber
+      FROM dw_htlmaindb.facthotelorder_all_inn om 
+      LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+      WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')
+        AND om.orderdate <= "$effectdate('yyyy-MM-dd',-1)" 
+        AND om.orderdate >= "$effectdate('yyyy-MM-dd',-31)"  
+        AND om.d = "$effectdate('yyyy-MM-dd',0)"  ) t6 
+  ) w ON v.all = w.all
+JOIN (SELECT 'all' as `all`,count(oh.orderId) AS orderNumber
+      FROM ods_htl_bnborderdb.order_header_v2 oh,
+        ods_htl_bnborderdb.order_item oi,
+        ods_htl_bnborderdb.order_item_space ois
+      WHERE oh.orderId = oi.orderId 
+        AND oi.orderItemId = ois.orderItemId 
+        AND oh.payStatusId IN (12, 20, 22, 23)
+        AND ois.cityId IS NOT NULL
+        AND oh.createdTime <= "$effectdate('yyyy-MM-dd',-1)" 
+        AND oh.createdTime >= "$effectdate('yyyy-MM-dd',-31)"  
+        AND oh.salesChannel = 1 
+        AND oh.visitsource NOT IN (14, 18)
+        AND oh.d = "$effectdate('yyyy-MM-dd',0)"  
+        AND oi.d = "$effectdate('yyyy-MM-dd',0)" 
+        AND ois.d = "$effectdate('yyyy-MM-dd',0)"  
+) x ON v.all = x.all
+JOIN (SELECT 'all' as `all`,count(om.orderid) AS orderNumber
+      FROM dw_htlmaindb.facthotelorder_all_inn om 
+      LEFT JOIN Dim_HtlDB.dimhtlhotel dhh ON dhh.hotel = om.hotel
+      WHERE (om.ordertype_ubt IS NULL OR om.ordertype_ubt = '直接订单')
+        AND om.orderdate <= "$effectdate('yyyy-MM-dd',-1)" 
+        AND om.orderdate >= "$effectdate('yyyy-MM-dd',-31)" 
+        AND om.d = "$effectdate('yyyy-MM-dd',0)"  
+) y ON v.all = y.all 
+) all
+order by  `日支付订单数` desc,`周支付订单数` desc,`月支付订单数` desc,`日转化率` desc，`周转化率` desc，`月转化率` desc
+limit 10000
